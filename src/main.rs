@@ -1,3 +1,5 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -22,7 +24,7 @@ struct Tokens {
 
 fn random_string(bytes: usize) -> Result<String> {
     let mut buf = vec![0; bytes];
-    getrandom::fill(&mut buf).map_err(|e| format!("Rastgele veri olusturulamadi: {e}"))?;
+    getrandom::fill(&mut buf).map_err(|e| format!("Could not generate random data: {e}"))?;
     Ok(URL_SAFE_NO_PAD.encode(buf))
 }
 fn challenge(verifier: &str) -> String {
@@ -56,14 +58,14 @@ fn login(client_id: &str) -> Result<()> {
         .append_pair("redirect_uri", REDIRECT).append_pair("code_challenge_method", "S256")
         .append_pair("code_challenge", &challenge(&verifier)).append_pair("state", &state)
         .append_pair("scope", "user-library-read user-read-private user-read-email playlist-read-private playlist-read-collaborative user-read-playback-state user-modify-playback-state streaming");
-    println!("Tarayicida Spotify girisi aciliyor. Acilmazsa: {auth}");
+    println!("Opening Spotify sign-in in your browser. If it does not open: {auth}");
     if let Err(e) = open::that(auth.as_str()) {
-        eprintln!("Tarayici acilamadi: {e}");
+        eprintln!("Could not open the browser: {e}");
     }
     let started = Instant::now();
     loop {
         if started.elapsed() > Duration::from_secs(180) {
-            return Err("Giris zaman asimina ugradi".into());
+            return Err("Sign-in timed out".into());
         }
         let (mut stream, _) = match listener.accept() {
             Ok(v) => v,
@@ -107,9 +109,9 @@ fn login(client_id: &str) -> Result<()> {
             let _ = stream.write_all(
                 b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
             );
-            return Err(format!("Spotify girisi reddedildi: {error}").into());
+            return Err(format!("Spotify sign-in was rejected: {error}").into());
         }
-        let code = code.ok_or("Spotify yetkilendirme kodu gondermedi")?;
+        let code = code.ok_or("Spotify did not send an authorization code")?;
         let tokens = token_request(&[
             ("client_id", client_id),
             ("grant_type", "authorization_code"),
@@ -121,12 +123,12 @@ fn login(client_id: &str) -> Result<()> {
             tokens
                 .refresh_token
                 .as_deref()
-                .ok_or("Yenileme tokeni alinmadi")?,
+                .ok_or("No refresh token was received")?,
         )?;
         remember_client_id(client_id)?;
-        let body = "Giris tamamlandi. Bu pencereyi kapatabilirsiniz.";
+        let body = "Sign-in complete. You can close this window.";
         write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body)?;
-        println!("Giris tamamlandi.");
+        println!("Sign-in complete.");
         return Ok(());
     }
 }
@@ -163,7 +165,7 @@ fn search_tracks(client_id: &str, query: &str) -> Result<Vec<Track>> {
         .into_json()?;
     let items = result["tracks"]["items"]
         .as_array()
-        .ok_or("Spotify arama sonucu gecersiz")?;
+        .ok_or("Invalid Spotify search response")?;
     Ok(items
         .iter()
         .filter_map(|item| {
@@ -200,15 +202,13 @@ fn library_page(client_id: &str, section: &str, offset: usize) -> Result<Vec<Tra
         .call()
         .map_err(|e| match e {
             ureq::Error::Status(403, _) if section == "liked" => {
-                "Kutuphane izni gerekli; Ayarlar'dan Spotify ile yeniden giris yapin.".to_owned()
+                "Library access is required; sign in to Spotify again in Settings.".to_owned()
             }
-            ureq::Error::Status(403, _) => "Spotify bu listeye erisim vermiyor.".to_owned(),
+            ureq::Error::Status(403, _) => "Spotify does not allow access to this list.".to_owned(),
             other => other.to_string(),
         })?;
     let data: serde_json::Value = response.into_json()?;
-    let items = data["items"]
-        .as_array()
-        .ok_or("Gecersiz kutuphane cevabi")?;
+    let items = data["items"].as_array().ok_or("Invalid library response")?;
     Ok(items
         .iter()
         .filter_map(|row| {
@@ -303,9 +303,9 @@ impl Default for DesktopApp {
             query: String::new(),
             results: Vec::new(),
             status: if has_session {
-                "Kayitli oturum bulundu; arama yapabilirsiniz."
+                "Saved session found. You can start searching."
             } else {
-                "Spotify client ID girin ve giris yapin."
+                "Enter your Spotify client ID and sign in."
             }
             .into(),
             pending: None,
@@ -354,7 +354,7 @@ impl DesktopApp {
         let id = self.client_id.trim().to_owned();
         let (tx, rx) = std::sync::mpsc::channel();
         self.pending = Some(rx);
-        self.status = "Yukleniyor...".into();
+        self.status = "Loading...".into();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let result = library_page(&id, &section, offset).map_err(|e| e.to_string());
@@ -403,12 +403,12 @@ impl DesktopApp {
     fn start(&mut self, ctx: &eframe::egui::Context, action: &'static str) {
         let id = self.client_id.trim().to_owned();
         if id.is_empty() {
-            self.status = "Spotify client ID gerekli.".into();
+            self.status = "A Spotify client ID is required.".into();
             return;
         }
         let query = self.query.trim().to_owned();
         if action == "search" && query.is_empty() {
-            self.status = "Bir arama yazin.".into();
+            self.status = "Enter a search term.".into();
             return;
         }
         let (tx, rx) = std::sync::mpsc::channel();
@@ -416,9 +416,9 @@ impl DesktopApp {
         self.pending = Some(rx);
         self.pending_login = action == "login";
         self.status = if action == "login" {
-            "Tarayicida Spotify girisini tamamlayin..."
+            "Complete Spotify sign-in in your browser..."
         } else {
-            "Araniyor..."
+            "Searching..."
         }
         .into();
         std::thread::spawn(move || {
@@ -454,7 +454,7 @@ fn parse_playback(value: &serde_json::Value) -> NowPlaying {
     NowPlaying {
         title: item["identity"]["name"]
             .as_str()
-            .unwrap_or("Bir sarki secin")
+            .unwrap_or("Choose a song")
             .to_owned(),
         artist: item["creators"][0]["entity"]["decorations"]["identity"]["name"]
             .as_str()
@@ -481,20 +481,20 @@ enum PlaybackCommand {
 impl DesktopApp {
     fn start_soloist(&mut self, ctx: &eframe::egui::Context) {
         if self.playback.as_ref().is_some_and(|tx| !tx.is_closed()) {
-            self.status = "Soloist zaten acik.".into();
+            self.status = "Soloist is already running.".into();
             return;
         }
         let path = self.soloist_path.trim().to_owned();
         let key = self.soloist_key.trim().to_owned();
         if key.is_empty() {
-            self.status = "Soloist API anahtarini girin.".into();
+            self.status = "Enter your Soloist API key.".into();
             return;
         }
         for (name, value) in [("soloist-path", &path), ("soloist-key", &key)] {
             if let Err(e) =
                 keyring::Entry::new(SERVICE, name).and_then(|entry| entry.set_password(value))
             {
-                self.status = format!("Ayar kaydedilemedi: {e}");
+                self.status = format!("Could not save settings: {e}");
                 return;
             }
         }
@@ -516,19 +516,19 @@ impl DesktopApp {
                     .join("Spotimini")
                     .join("soloist"),
                 None => {
-                    notify("LOCALAPPDATA bulunamadi.".into());
+                    notify("LOCALAPPDATA was not found.".into());
                     return;
                 }
             };
             if let Err(e) = std::fs::create_dir_all(&app_dir) {
-                notify(format!("Klasor hatasi: {e}"));
+                notify(format!("Folder error: {e}"));
                 return;
             }
             let path = if path.is_empty() {
                 let install_dir = app_dir.join("player");
                 let exe = install_dir.join("soloist.exe");
                 if !exe.is_file() {
-                    notify("Oynatici indiriliyor...".into());
+                    notify("Downloading player...".into());
                     let download = (|| -> Result<()> {
                         std::fs::create_dir_all(&install_dir)?;
                         let archive = app_dir.join("soloist.zip");
@@ -536,7 +536,7 @@ impl DesktopApp {
                         let mut reader = response.into_reader().take(100 * 1024 * 1024 + 1);
                         let mut file = std::fs::File::create(&archive)?;
                         if std::io::copy(&mut reader, &mut file)? > 100 * 1024 * 1024 {
-                            return Err("Soloist arsivi cok buyuk".into());
+                            return Err("Soloist archive is too large".into());
                         }
                         drop(file);
                         let result = std::process::Command::new("tar.exe")
@@ -547,13 +547,13 @@ impl DesktopApp {
                             .creation_flags(CREATE_NO_WINDOW)
                             .output()?;
                         if !result.status.success() || !exe.is_file() {
-                            return Err("Soloist arsivi acilamadi".into());
+                            return Err("Could not extract the Soloist archive".into());
                         }
                         std::fs::remove_file(archive)?;
                         Ok(())
                     })();
                     if let Err(e) = download {
-                        notify(format!("Oynatici indirilemedi: {e}"));
+                        notify(format!("Could not download the player: {e}"));
                         return;
                     }
                 }
@@ -585,14 +585,14 @@ impl DesktopApp {
             {
                 Ok(child) => child,
                 Err(e) => {
-                    notify(format!("Soloist acilamadi: {e}"));
+                    notify(format!("Could not start Soloist: {e}"));
                     return;
                 }
             };
             process.child = Some(child);
             drop(process);
             notify(
-                "Soloist aciliyor. Telefonda Spotify cihazlarindan Spotimini Soloist'i secin."
+                "Starting Soloist. Select Spotimini Soloist in the Spotify device list on your phone."
                     .into(),
             );
             let mut last_poll = Instant::now() - Duration::from_secs(3);
@@ -613,12 +613,12 @@ impl DesktopApp {
                 match child_status {
                     Ok(Some(status)) => {
                         notify(format!(
-                            "Soloist kapandi: {status}. Anahtari ve surumu kontrol edin."
+                            "Soloist exited: {status}. Check the API key and version."
                         ));
                         break;
                     }
                     Err(e) => {
-                        notify(format!("Soloist hatasi: {e}"));
+                        notify(format!("Soloist error: {e}"));
                         break;
                     }
                     _ => {}
@@ -657,31 +657,31 @@ impl DesktopApp {
                     PlaybackCommand::Play(track) => {
                         args.push("play".into());
                         args.push(format!("spotify:track:{}", track.id));
-                        format!("Oynatma komutu: {}", track.label)
+                        format!("Playback command: {}", track.label)
                     }
                     PlaybackCommand::Pause => {
                         args.push("pause".into());
-                        "Duraklatma komutu gonderildi.".into()
+                        "Pause command sent.".into()
                     }
                     PlaybackCommand::Resume => {
                         args.push("play".into());
-                        "Devam komutu gonderildi.".into()
+                        "Resume command sent.".into()
                     }
                     PlaybackCommand::Next => {
                         args.push("next".into());
-                        "Sonraki sarki.".into()
+                        "Next track.".into()
                     }
                     PlaybackCommand::Previous => {
                         args.push("prev".into());
-                        "Onceki sarki.".into()
+                        "Previous track.".into()
                     }
                     PlaybackCommand::Seek(ms) => {
                         args.extend(["seek".into(), ms.to_string()]);
-                        "Konum degistirildi.".into()
+                        "Playback position updated.".into()
                     }
                     PlaybackCommand::Volume(volume) => {
                         args.extend(["volume".into(), volume.to_string()]);
-                        "Ses ayarlandi.".into()
+                        "Volume updated.".into()
                     }
                 };
                 match std::process::Command::new(&path)
@@ -694,7 +694,7 @@ impl DesktopApp {
                         "Soloist: {}",
                         String::from_utf8_lossy(&output.stderr).trim()
                     )),
-                    Err(e) => notify(format!("Soloist kontrol hatasi: {e}")),
+                    Err(e) => notify(format!("Soloist control error: {e}")),
                 }
             }
             if let Ok(mut process) = soloist_process.lock() {
@@ -708,11 +708,11 @@ impl DesktopApp {
     fn play_track(&mut self, _ctx: &eframe::egui::Context, track: Track) {
         if let Some(tx) = &self.playback {
             if tx.send(PlaybackCommand::Play(track)).is_ok() {
-                self.status = "Oynatma komutu gonderiliyor...".into();
+                self.status = "Sending playback command...".into();
                 return;
             }
         }
-        self.status = "Once Soloist'i baslatin ve telefondan eslestirin.".into();
+        self.status = "Start Soloist and connect it from your phone first.".into();
     }
 }
 impl eframe::App for DesktopApp {
@@ -739,11 +739,11 @@ impl eframe::App for DesktopApp {
             match rx.try_recv() {
                 Ok(Ok(items)) => {
                     self.status = if self.pending_login {
-                        "Giris tamamlandi; arama yapabilirsiniz.".into()
+                        "Sign-in complete. You can start searching.".into()
                     } else if items.is_empty() {
-                        "Sonuc bulunamadi.".into()
+                        "No results found.".into()
                     } else {
-                        format!("{} sonuc bulundu.", items.len())
+                        format!("{} results found.", items.len())
                     };
                     self.has_more = items.len() == 50;
                     if self.append_page {
@@ -755,11 +755,11 @@ impl eframe::App for DesktopApp {
                     self.pending = None;
                 }
                 Ok(Err(e)) => {
-                    self.status = format!("Hata: {e}");
+                    self.status = format!("Error: {e}");
                     self.pending = None;
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    self.status = "Islem beklenmedik sekilde durdu.".into();
+                    self.status = "The operation stopped unexpectedly.".into();
                     self.pending = None;
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
@@ -792,7 +792,7 @@ impl eframe::App for DesktopApp {
                             .color(Color32::from_rgb(95, 225, 150)),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Ayarlar").clicked() {
+                        if ui.button("Settings").clicked() {
                             self.show_settings = !self.show_settings;
                         }
                     });
@@ -815,7 +815,7 @@ impl eframe::App for DesktopApp {
                         ui.set_min_width(170.0);
                         ui.label(
                             RichText::new(if self.now.title.is_empty() {
-                                "Bir sarki secin"
+                                "Choose a song"
                             } else {
                                 &self.now.title
                             })
@@ -831,7 +831,7 @@ impl eframe::App for DesktopApp {
                                 .show_value(false)
                                 .clamping(egui::SliderClamping::Always),
                         );
-                        ui.label(format!("Ses {volume}%"));
+                        ui.label(format!("Volume {volume}%"));
                         if response.changed() {
                             self.now.volume = volume;
                             if let Some(tx) = &self.playback {
@@ -842,16 +842,12 @@ impl eframe::App for DesktopApp {
                 });
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if ui.button("|<").on_hover_text("Onceki").clicked() {
+                    if ui.button("|<").on_hover_text("Previous").clicked() {
                         if let Some(tx) = &self.playback {
                             let _ = tx.send(PlaybackCommand::Previous);
                         }
                     }
-                    let text = if self.now.playing {
-                        "Duraklat"
-                    } else {
-                        "Oynat"
-                    };
+                    let text = if self.now.playing { "Pause" } else { "Play" };
                     if ui
                         .add(
                             egui::Button::new(RichText::new(text).strong())
@@ -868,7 +864,7 @@ impl eframe::App for DesktopApp {
                             });
                         }
                     }
-                    if ui.button(">|").on_hover_text("Sonraki").clicked() {
+                    if ui.button(">|").on_hover_text("Next").clicked() {
                         if let Some(tx) = &self.playback {
                             let _ = tx.send(PlaybackCommand::Next);
                         }
@@ -896,50 +892,54 @@ impl eframe::App for DesktopApp {
             )
             .show(ctx, |ui| {
                 if self.show_settings {
-                    ui.heading("Ayarlar");
+                    ui.heading("Settings");
                     ui.label("Spotify Client ID");
                     ui.text_edit_singleline(&mut self.client_id);
                     if ui
                         .add_enabled(
                             self.pending.is_none(),
-                            egui::Button::new("Spotify ile giris yap"),
+                            egui::Button::new("Sign in with Spotify"),
                         )
                         .clicked()
                     {
                         self.start(ctx, "login");
                     }
                     ui.add_space(10.0);
-                    ui.label("Soloist API anahtari");
+                    ui.label("Soloist API key");
                     ui.add(egui::TextEdit::singleline(&mut self.soloist_key).password(true));
-                    ui.label("Soloist dosya yolu (istege bagli)");
+                    ui.label("Soloist file path (optional)");
                     ui.text_edit_singleline(&mut self.soloist_path);
-                    if ui.button("Oynaticiyi baslat").clicked() {
+                    if ui.button("Start player").clicked() {
                         self.start_soloist(ctx);
                     }
                     ui.separator();
                 }
                 ui.horizontal(|ui| {
-                    if ui.button("Ara").clicked() {
+                    if ui.button("Search").clicked() {
                         self.section = "search".into();
                         self.results.clear();
                     }
-                    if ui.button("Begendiklerim").clicked() {
+                    if ui.button("Liked songs").clicked() {
                         self.load_library(ctx, "liked".into(), false);
                     }
-                    if ui.button("Calma listelerim").clicked() {
+                    if ui.button("Playlists").clicked() {
                         self.load_library(ctx, "playlists".into(), false);
                     }
                 });
-                ui.label(RichText::new("Ne dinlemek istersin?").size(25.0).strong());
+                ui.label(
+                    RichText::new("What would you like to listen to?")
+                        .size(25.0)
+                        .strong(),
+                );
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     let response = ui.add(
                         egui::TextEdit::singleline(&mut self.query)
-                            .hint_text("Sarki veya sanatci ara")
+                            .hint_text("Search songs or artists")
                             .desired_width((ui.available_width() - 80.0).max(80.0)),
                     );
                     if ui
-                        .add_enabled(self.pending.is_none(), egui::Button::new("Ara"))
+                        .add_enabled(self.pending.is_none(), egui::Button::new("Search"))
                         .clicked()
                         || (self.pending.is_none()
                             && response.lost_focus()
@@ -959,7 +959,7 @@ impl eframe::App for DesktopApp {
                 ui.add_space(12.0);
                 if !self.results.is_empty() {
                     ui.label(
-                        RichText::new("SONUCLAR")
+                        RichText::new("RESULTS")
                             .strong()
                             .color(Color32::from_gray(150)),
                     );
@@ -1001,7 +1001,7 @@ impl eframe::App for DesktopApp {
                 if self.has_more
                     && self.section != "search"
                     && ui
-                        .add_enabled(self.pending.is_none(), egui::Button::new("Daha fazla"))
+                        .add_enabled(self.pending.is_none(), egui::Button::new("Load more"))
                         .clicked()
                 {
                     self.load_library(ctx, self.section.clone(), true);
@@ -1036,7 +1036,7 @@ fn run() -> Result<()> {
         return desktop();
     }
     let client_id = env::var("SPOTIMINI_CLIENT_ID")
-        .map_err(|_| "SPOTIMINI_CLIENT_ID ortam degiskenini ayarlayin")?;
+        .map_err(|_| "Set the SPOTIMINI_CLIENT_ID environment variable")?;
     match args.get(1).map(String::as_str) {
         Some("login") => login(&client_id),
         Some("search") if args.len() > 2 => {
@@ -1047,10 +1047,10 @@ fn run() -> Result<()> {
         }
         Some("logout") => {
             credential(&client_id)?.delete_credential()?;
-            println!("Oturum silindi.");
+            println!("Signed out.");
             Ok(())
         }
-        _ => Err("Kullanim: spotimini login | search <sorgu> | logout".into()),
+        _ => Err("Usage: spotimini login | search <query> | logout".into()),
     }
 }
 fn main() {
@@ -1059,7 +1059,7 @@ fn main() {
     logger.filter_module("symphonia_bundle_mp3::demuxer", log::LevelFilter::Error);
     logger.init();
     if let Err(e) = run() {
-        eprintln!("Hata: {e}");
+        eprintln!("Error: {e}");
         std::process::exit(1);
     }
 }

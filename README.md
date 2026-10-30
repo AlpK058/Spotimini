@@ -2,6 +2,8 @@
 
 Spotimini is a Windows desktop Spotify client written in Rust. It lets you sign in, search for tracks, browse your saved music and playlists, and control playback through Spotify Soloist.
 
+The following artwork illustrates the app's features; it is not a screenshot of the interface.
+
 ![Illustrated overview of Spotimini features](docs/overview.svg)
 
 ## Requirements
@@ -13,12 +15,14 @@ Spotimini is a Windows desktop Spotify client written in Rust. It lets you sign 
 
 ## Build and run
 
-![Illustrated setup steps](docs/setup.svg)
+![Illustrated setup steps, not a screenshot](docs/setup.svg)
 
 ```powershell
 cargo build --release
 .\target\release\spotimini.exe
 ```
+
+The release build opens as a desktop application without a console window.
 
 In the Spotify Developer Dashboard, add `http://127.0.0.1:8888/callback` as a redirect URI. Open Spotimini, enter your application's client ID in Settings, and sign in with Spotify.
 
