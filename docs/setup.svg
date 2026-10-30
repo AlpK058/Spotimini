@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">Spotimini setup</title>
+  <desc id="desc">Three illustrated setup steps: configure Spotify, sign in, and start Soloist.</desc>
+  <rect width="1200" height="360" rx="24" fill="#161c1a"/>
+  <text x="65" y="76" fill="#f4f7f5" font-family="Segoe UI, sans-serif" font-size="30" font-weight="700">GET STARTED</text>
+  <g font-family="Segoe UI, sans-serif">
+    <circle cx="90" cy="160" r="30" fill="#5fe196"/><text x="80" y="169" fill="#102017" font-size="25" font-weight="700">1</text>
+    <text x="145" y="155" fill="#fff" font-size="23" font-weight="600">Configure Spotify</text><text x="145" y="187" fill="#aebbb4" font-size="17">Add the redirect URI</text>
+    <circle cx="450" cy="160" r="30" fill="#5fe196"/><text x="440" y="169" fill="#102017" font-size="25" font-weight="700">2</text>
+    <text x="505" y="155" fill="#fff" font-size="23" font-weight="600">Sign in</text><text x="505" y="187" fill="#aebbb4" font-size="17">Enter your client ID</text>
+    <circle cx="810" cy="160" r="30" fill="#5fe196"/><text x="800" y="169" fill="#102017" font-size="25" font-weight="700">3</text>
+    <text x="865" y="155" fill="#fff" font-size="23" font-weight="600">Start Soloist</text><text x="865" y="187" fill="#aebbb4" font-size="17">Connect and play</text>
+  </g>
+  <path d="M120 260H1080" stroke="#31453b" stroke-width="2"/>
+  <text x="65" y="315" fill="#87998e" font-family="Segoe UI, sans-serif" font-size="17">Illustrated overview · No personal account information shown</text>
+</svg>

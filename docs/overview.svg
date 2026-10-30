@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Spotimini feature overview</title>
+  <desc id="desc">An illustration of the search, library, and playback features.</desc>
+  <rect width="1200" height="630" fill="#0e1112"/>
+  <circle cx="1050" cy="30" r="300" fill="#142a20"/>
+  <text x="80" y="110" fill="#5fe196" font-family="Segoe UI, sans-serif" font-size="30" font-weight="700" letter-spacing="4">SPOTIMINI</text>
+  <text x="80" y="200" fill="#f4f7f5" font-family="Segoe UI, sans-serif" font-size="52" font-weight="700">Your music, in one place.</text>
+  <text x="80" y="250" fill="#aebbb4" font-family="Segoe UI, sans-serif" font-size="24">A small Spotify desktop client for Windows</text>
+  <g font-family="Segoe UI, sans-serif">
+    <rect x="80" y="320" width="320" height="200" rx="20" fill="#1a2120" stroke="#31453b"/>
+    <circle cx="125" cy="371" r="15" fill="none" stroke="#5fe196" stroke-width="5"/><path d="M136 382l14 14" stroke="#5fe196" stroke-width="5" stroke-linecap="round"/>
+    <text x="110" y="438" fill="#fff" font-size="27" font-weight="600">Search</text><text x="110" y="476" fill="#aebbb4" font-size="18">Find songs and artists</text>
+    <rect x="440" y="320" width="320" height="200" rx="20" fill="#1a2120" stroke="#31453b"/>
+    <path d="M478 355h36v40h-36z M487 345h36v40" fill="none" stroke="#5fe196" stroke-width="4" stroke-linejoin="round"/>
+    <text x="470" y="438" fill="#fff" font-size="27" font-weight="600">Your library</text><text x="470" y="476" fill="#aebbb4" font-size="18">Browse saved music and playlists</text>
+    <rect x="800" y="320" width="320" height="200" rx="20" fill="#1a2120" stroke="#31453b"/>
+    <circle cx="850" cy="374" r="24" fill="#5fe196"/><path d="M845 362l18 12-18 12z" fill="#102017"/>
+    <text x="830" y="438" fill="#fff" font-size="27" font-weight="600">Playback</text><text x="830" y="476" fill="#aebbb4" font-size="18">Control music with Soloist</text>
+  </g>
+</svg>

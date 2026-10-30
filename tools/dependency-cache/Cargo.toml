@@ -1,0 +1,9 @@
+﻿[package]
+name = "spotimini-dependency-cache"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+eframe = "0.33"
+librespot = { version = "0.8", default-features = false, features = ["rodio-backend", "rustls-tls-native-roots"] }
